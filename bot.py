@@ -323,6 +323,60 @@ async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # =======================
+# دستور /actives - لیست کامل کاربران با اشتراک فعال
+# =======================
+async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        await update.message.reply_text("فقط ادمین می‌تونه اینو ببینه!")
+        return
+
+    data = load_data()
+    active_users = []
+
+    for uid_str, info in data.get("users", {}).items():
+        try:
+            expiry = datetime.datetime.fromisoformat(info["expiry"])
+            if expiry > datetime.datetime.now():
+                user_id = int(uid_str)
+                # سعی می‌کنیم یوزرنیم و اسم رو از تلگرام بگیریم
+                try:
+                    user = await context.bot.get_chat(user_id)
+                    username = f"@{user.username}" if user.username else "ندارد"
+                except:
+                    username = "ندارد (مسدود یا حذف شده)"
+
+                persian_date = expiry.strftime('%Y/%m/%d').replace('2025', '1404').replace('2026', '1405')  # تبدیل به شمسی تقریبی
+                active_users.append((user_id, username, persian_date))
+        except:
+            continue
+
+    # مرتب‌سازی بر اساس تاریخ انقضا (جدیدتر بالا)
+    active_users.sort(key=lambda x: x[2], reverse=True)
+
+    if not active_users:
+        await update.message.reply_text("هیچکس اشتراک فعال نداره!")
+        return
+
+    lines = [f"اشتراک‌های فعال ({len(active_users)} نفر)\n"]
+    for i, (uid, username, exp) in enumerate(active_users, 1):
+        lines.append(f"{i}. `{uid}`  →  {username}  (تا {exp})")
+
+    text = "\n".join(lines)
+
+    # اگر متن خیلی بلند شد، به صورت فایل txt می‌فرستیم
+    if len(text) > 4000:
+        file_content = "\n".join([f"{uid} | {username} | تا {exp}" for uid, username, exp in active_users])
+        file_content = "USERID | USERNAME | انقضا\n" + file_content
+        await update.message.reply_document(
+            document=("active_users.txt", file_content.encode('utf-8')),
+            caption=f"لیست {len(active_users)} کاربر فعال به صورت فایل:"
+        )
+    else:
+        await update.message.reply_text(text, parse_mode="Markdown")
+
+
+
+# =======================
 # /ban
 # =======================
 
@@ -723,7 +777,7 @@ def main():
     application.add_handler(CommandHandler("removesub", remove_subscription))
     application.add_handler(CommandHandler("ban", ban_user))
     application.add_handler(CommandHandler("unban", unban_user))
-    
+    application.add_handler(CommandHandler("subs", subs))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
     application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE | filters.TEXT & ~filters.COMMAND, admin_media))
     application.add_handler(CallbackQueryHandler(button_handler))
@@ -734,5 +788,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
