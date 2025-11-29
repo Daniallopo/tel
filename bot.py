@@ -255,7 +255,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = build_main_keyboard(update.effective_user.id in ADMINS)
 
     welcome_text = """
-🔥 سلام! خوش اومدی به دنیای فیلم های پورن 🔞
+🔥 سلام! خوش اومدی به دنیای فیلم های اکشن 🔞
 اینجا می‌تونی جدیدترین و باکیفیت‌ترین ویدیوها رو ببینی.
 از منوی پایین دسته مورد نظر رو انتخاب کن 👇
 
@@ -263,6 +263,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
 
     await update.message.reply_text(welcome_text, reply_markup=kb)
+
+
+# =======================
+# دستور /backup – نسخه نهایی و بدون هیچ اروری (Railway + GitHub)
+# =======================
+import zipfile
+from io import BytesIO
+import os               # ← این خط رو اضافه کن
+import datetime
+
+async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        await update.message.reply_text("فقط ادمین می‌تونه بکاپ بگیره!")
+        return
+
+    await update.message.reply_chat_action("upload_document")
+
+    # ساخت zip در حافظه
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        files = [
+            ("data.json", DATA_FILE),
+            ("pending.json", PENDING_FILE),
+            ("users.txt", USERS_FILE)
+        ]
+        for display_name, real_path in files:
+            try:
+                with open(real_path, "rb") as f:
+                    zip_file.writestr(display_name, f.read())
+            except Exception:
+                zip_file.writestr(display_name, "{}")  # فایل خالی می‌سازه اگه مشکلی بود
+
+    buffer.seek(0)
+
+    # اسم فایل با تاریخ و ساعت
+    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    filename = f"Backup_{now}.zip"
+
+    await update.message.reply_document(
+        document=buffer,
+        filename=filename,
+        caption=f"بکاپ کامل ربات\nتاریخ: {now}\nتعداد فایل: ۳ تا"
+    )
+
 
 
 # =======================
@@ -321,9 +365,9 @@ async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
     except:
         pass
 
-    
+
 # =======================
-# دستور /actives - لیست کامل کاربران با اشتراک فعال
+# دستور /subs - لیست کامل کاربران با اشتراک فعال
 # =======================
 async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
@@ -373,7 +417,6 @@ async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(text, parse_mode="Markdown")
-
 
 
 # =======================
@@ -619,8 +662,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # دسته ویژه: لذت ۱ دقیقه‌ای
-    if text == "لذت ۱ دقیقه‌ای":
+    # دسته ویژه: لذت ۱ دقیقه‌ای 1️⃣
+    if text == "لذت ۱ دقیقه‌ای 1️⃣":
+
         if not has_subscription(user_id):
             return await update.message.reply_text("❌ اشتراک ندارید")
 
@@ -672,100 +716,50 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
-
     if is_banned(update.effective_user.id):
         return
 
     now_time = datetime.datetime.now().isoformat()
+    content = None
 
+    # متن
     if update.message.text:
         content = {"type": "text", "data": update.message.text, "time": now_time}
+
+    # عکس
     elif update.message.photo:
+        content = {"type": "video", "data": update.message.photo[-1].file_id, "time": now_time}  # نوع photo ولی file_id همان video نیست! درستش اینه:
         content = {"type": "photo", "data": update.message.photo[-1].file_id, "time": now_time}
+
+    # ویدیو معمولی
     elif update.message.video:
         content = {"type": "video", "data": update.message.video.file_id, "time": now_time}
+
+    # ویدیو نوت (دایره‌ای) - این خط جدید و مهمه!
+    elif update.message.video_note:
+        content = {"type": "video", "data": update.message.video_note.file_id, "time": now_time}
+
     else:
-        return
+        return  # اگر هیچ کدوم نبود، کاری نکن
 
-    pkey = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-
+    # ساخت کلید موقت برای pending
+    pkey = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
     pending = load_pending()
     pending[pkey] = content
     save_pending(pending)
 
+    # ساخت کیبورد انتخاب دسته
     data = load_data()
-
     kb = [
-        [InlineKeyboardButton(info["name"], callback_data=f"ADD_{cat_key}_{pkey}")]
+        [InlineKeyboardButton(info["name"], callback_data=f"ADD::{cat_key}::{pkey}")]
         for cat_key, info in data["categories"].items()
     ]
-
     kb.append([InlineKeyboardButton("لغو", callback_data="CANCEL")])
 
     await update.message.reply_text(
-        "محتوا به کدام دسته اضافه شود؟",
+        "به کدوم دسته اضافه بشه؟",
         reply_markup=InlineKeyboardMarkup(kb)
     )
-
-
-# =======================
-# بکاپ خودکار هر وقت تغییری شد (فقط برای ادمین اصلی)
-# =======================
-import hashlib
-import asyncio
-
-# آیدی خودت رو اینجا بذار (همونی که می‌خوای بکاپ براش بیاد)
-AUTO_BACKUP_ADMIN = 7756216825  # ← عوضش کن به آیدی خودت
-
-# برای ذخیره وضعیت قبلی فایل‌ها
-_last_data_hash = None
-_last_pending_hash = None
-
-async def auto_backup_if_changed(context: ContextTypes.DEFAULT_TYPE):
-    global _last_data_hash, _last_pending_hash
-
-    # اگه هنوز فایل‌ها وجود ندارن، ولش کن
-    if not os.path.exists(DATA_FILE) or not os.path.exists(PENDING_FILE):
-        return
-
-    try:
-        # هش فعلی data.json
-        with open(DATA_FILE, "rb") as f:
-            current_data_hash = hashlib.md5(f.read()).hexdigest()
-        # هش فعلی pending.json
-        with open(PENDING_FILE, "rb") as f:
-            current_pending_hash = hashlib.md5(f.read()).hexdigest()
-    except:
-        return
-
-    # اگه تغییری کرده بود
-    if (current_data_hash != _last_data_hash) or (current_pending_hash != _last_pending_hash):
-        _last_data_hash = current_data_hash
-        _last_pending_hash = current_pending_hash
-
-        # ساخت فایل زیپ
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for path, name in [
-                (DATA_FILE, "data.json"),
-                (PENDING_FILE, "pending.json"),
-                (USERS_FILE, "users.txt")
-            ]:
-                try:
-                    with open(path, "rb") as f:
-                        zf.writestr(name, f.read())
-                except:
-                    zf.writestr(name, "{}")
-
-        buffer.seek(0)
-        now = datetime.datetime.now().strftime("%H:%M - %d/%m/%Y")
-
-        await context.bot.send_document(
-            chat_id=AUTO_BACKUP_ADMIN,
-            document=buffer,
-            filename=f"تغییرات_ربات_{now}.zip",
-            caption=f"تغییر جدید در دیتابیس!\nزمان: {now}\nربات به‌روز شد"
-        )
 
 
 # =======================
@@ -776,13 +770,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = load_data()
 
-    # افزودن به دسته
-    if query.data.startswith("ADD_"):
+    # ========================
+    # افزودن محتوا
+    # ========================
+    if query.data.startswith("ADD::"):
         if query.from_user.id not in ADMINS:
             await query.answer("اجازه ندارید", show_alert=True)
             return
 
-        _, cat_key, pkey = query.data.split("_")
+        # ساختار: ADD::cat_key::pkey
+        _, cat_key, pkey = query.data.split("::")
+
         pending = load_pending()
 
         if pkey not in pending:
@@ -802,6 +800,42 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(query.from_user.id, "✅ محتوای جدید اضافه شد.")
         await query.answer()
+        return
+
+    # ========================
+    # لغو
+    # ========================
+    if query.data == "CANCEL":
+        try:
+            await query.message.delete()
+        except:
+            pass
+
+        await context.bot.send_message(query.from_user.id, "لغو شد.")
+        await query.answer()
+        return
+
+    # ========================
+    # صفحه‌بندی
+    # ========================
+    if query.data.startswith("PAGE_"):
+        _, cat_key, page = query.data.split("_")
+        page = int(page)
+
+        await send_page(query.from_user.id, cat_key, page, context)
+        await query.answer()
+        return
+
+    # لغو
+    if query.data == "CANCEL":
+        try:
+            await query.message.delete()
+        except:
+            pass
+
+        await context.bot.send_message(query.from_user.id, "لغو شد.")
+        await query.answer()
+
         return
 
     # صفحه‌بندی
@@ -830,49 +864,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_data()
-    
-    # ساخت اپلیکیشن با JobQueue فعال
-    application = Application.builder().token(TOKEN).concurrent_updates(True).build()
-    
-    # فعال کردن JobQueue (این خط حتماً باشه!)
-    _ = application.job_queue  # این خط مهمه! بدون این job_queue کار نمی‌کنه
 
-    # بکاپ خودکار هر وقت تغییری شد
-    application.job_queue.run_repeating(
-        auto_backup_if_changed,
-        interval=30,    # هر ۳۰ ثانیه چک می‌کنه
-        first=10        # اولین چک بعد از ۱۰ ثانیه
-    )
+    app = Application.builder().token(TOKEN).build()
 
-    # هندلرها
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("addsub", add_sub))
-    application.add_handler(CommandHandler("removesub", remove_subscription))
-    application.add_handler(CommandHandler("ban", ban_user))
-    application.add_handler(CommandHandler("unban", unban_user))
-    application.add_handler(CommandHandler("subs", subs))
-    application.add_handler(CommandHandler("backup", backup_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
-    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.TEXT & ~filters.COMMAND, admin_media))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("addsub", add_sub))
+    app.add_handler(CommandHandler("removesub", remove_subscription))
+    app.add_handler(CommandHandler("ban", ban_user))
+    app.add_handler(CommandHandler("unban", unban_user))
+    app.add_handler(CommandHandler("subs", subs))
+    app.add_handler(CommandHandler("backup", backup_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_media))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("ربات با موفقیت بالا اومد - بکاپ خودکار فعاله!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("Bot Ba Movafaghiat Bala Umad. ✅")
+    app.run_polling()
+
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
