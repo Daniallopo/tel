@@ -831,6 +831,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_data()
     application = Application.builder().token(TOKEN).concurrent_updates(True).build()
+application.job_queue  # این خط مهمه!
 
         # چک کردن تغییرات هر 30 ثانیه
     application.job_queue.run_repeating(
@@ -856,6 +857,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
