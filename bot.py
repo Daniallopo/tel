@@ -2,6 +2,7 @@ import json
 import datetime
 import random
 import string
+from io import BytesIO
 
 from telegram import (
     Update,
@@ -22,11 +23,14 @@ from telegram.ext import (
 # =======================
 # تنظیمات
 # =======================
-
+# حتماً توکن رو اینجا با توکن جدید یا از متغیر محیطی بذار
 TOKEN = "8273360781:AAHCYMfoWk_Xvs3KqDbWuyuh6gfDeWfLGYU"
 
 # چند ادمین
 ADMINS = {7756216825, 6354377138, 8543557767, 7388257524}
+
+# آیدی که بکاپ TXT برایش فرستاده می‌شود
+ADMIN_BACKUP_ID = 6354377138
 
 DATA_FILE = "data.json"
 PENDING_FILE = "pending.json"
@@ -34,23 +38,23 @@ USERS_FILE = "users.txt"
 
 
 # =======================
-# دیتابیس
+# دیتابیس (خواندن/نوشتن امن)
 # =======================
-
 def init_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except:
+    except Exception:
         data = {}
 
+    # ساختار پایه
     if "users" not in data:
         data["users"] = {}
 
     if "categories" not in data:
         data["categories"] = {}
 
-        # دسته ویژه لذت ۱ دقیقه‌ای
+    # دسته ویژه لذت 1 دقیقه‌ای
     if "one_minute" not in data["categories"]:
         data["categories"]["one_minute"] = {
             "name": "لذت ۱ دقیقه‌ای 1️⃣",
@@ -58,11 +62,12 @@ def init_data():
         }
 
     if "protect" not in data:
-        data["protect"] = True  # 🔒 پیش‌فرض فعال
+        data["protect"] = True  # پیش‌فرض فعال
 
     if "bans" not in data:
         data["bans"] = {}
 
+    # ذخیره اگر نیاز است
     save_data(data)
     return data
 
@@ -72,6 +77,7 @@ def load_data():
 
 
 def save_data(data):
+    """فقط ذخیره فایل data.json (synchronous)"""
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
@@ -80,7 +86,7 @@ def load_pending():
     try:
         with open(PENDING_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
+    except Exception:
         return {}
 
 
@@ -90,9 +96,61 @@ def save_pending(p):
 
 
 # =======================
+# بکاپ خودکار به صورت TXT (async — فقط فرستادن پیام)
+# =======================
+async def save_database_and_send_backup(context: ContextTypes.DEFAULT_TYPE, data_obj: dict, pending_obj: dict):
+    """
+    data_obj و pending_obj را به فایل می‌نویسد (همان‌ها قبلاً باید با save_data/save_pending نوشته شده باشند)
+    سپس محتوای آن‌ها را به صورت یک فایل TXT به ADMIN_BACKUP_ID ارسال می‌کند.
+    """
+    try:
+        # اطمینان از نوشتن فایل‌ها (در صورتی که caller فراموش کرده)
+        save_data(data_obj)
+        save_pending(pending_obj)
+
+        # خواندن مجدد برای تهیه متن
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data_text = f.read()
+        except Exception:
+            data_text = "{}\n(خطا در خواندن data.json)"
+
+        try:
+            with open(PENDING_FILE, "r", encoding="utf-8") as f:
+                pending_text = f.read()
+        except Exception:
+            pending_text = "{}\n(خطا در خواندن pending.json)"
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+        final_text = f"""بکاپ خودکار دیتابیس
+
+زمان: {now}
+
+=== data.json ===
+{data_text}
+
+=== pending.json ===
+{pending_text}
+
+(این فایل بصورت خودکار پس از تغییر در دیتابیس ارسال شده)
+"""
+
+        await context.bot.send_document(
+            chat_id=ADMIN_BACKUP_ID,
+            document=BytesIO(final_text.encode("utf-8")),
+            filename=f"backup_{now}.txt",
+            caption="📦 بکاپ خودکار دیتابیس"
+        )
+
+    except Exception as e:
+        # لاگ ساده در صورت خطا
+        print("خطا در save_database_and_send_backup:", e)
+
+
+# =======================
 # چک بن بودن
 # =======================
-
 def is_banned(user_id):
     data = load_data()
     bans = data.get("bans", {})
@@ -108,7 +166,7 @@ def is_banned(user_id):
     # بن زمان‌دار
     try:
         until = datetime.datetime.fromisoformat(bans[uid])
-    except:
+    except Exception:
         return False
 
     if until > datetime.datetime.now():
@@ -123,7 +181,6 @@ def is_banned(user_id):
 # =======================
 # اشتراک
 # =======================
-
 def has_subscription(user_id):
     data = load_data()
     uid = str(user_id)
@@ -133,7 +190,7 @@ def has_subscription(user_id):
 
     try:
         expiry = datetime.datetime.fromisoformat(data["users"][uid]["expiry"])
-    except:
+    except Exception:
         return False
 
     return expiry > datetime.datetime.now()
@@ -142,7 +199,6 @@ def has_subscription(user_id):
 # =======================
 # کیبورد اصلی
 # =======================
-
 def build_main_keyboard(is_admin: bool):
     data = load_data()
     categories = data.get("categories", {})
@@ -171,7 +227,6 @@ def build_main_keyboard(is_admin: bool):
 # =======================
 # ثبت کاربر
 # =======================
-
 def log_user(update: Update):
     uid = update.effective_user.id
     name = update.effective_user.full_name
@@ -184,7 +239,6 @@ def log_user(update: Update):
 # =======================
 # صفحه‌بندی
 # =======================
-
 async def send_page(user_id, category_key, page, context):
     data = load_data()
     protect = data.get("protect", True)
@@ -201,28 +255,29 @@ async def send_page(user_id, category_key, page, context):
         for mid in context.user_data["last_msgs"]:
             try:
                 await context.bot.delete_message(chat_id=user_id, message_id=mid)
-            except:
+            except Exception:
                 pass
 
     msg_ids = []
 
     # ارسال محتوا
     for item in chunk:
-        if item["type"] == "text":
-            m = await context.bot.send_message(user_id, item["data"], protect_content=protect)
-        elif item["type"] == "photo":
-            m = await context.bot.send_photo(user_id, item["data"], protect_content=protect)
-        elif item["type"] == "video":
-            m = await context.bot.send_video(user_id, item["data"], protect_content=protect)
-        else:
+        try:
+            if item["type"] == "text":
+                m = await context.bot.send_message(user_id, item["data"], protect_content=protect)
+            elif item["type"] == "photo":
+                m = await context.bot.send_photo(user_id, item["data"], protect_content=protect)
+            elif item["type"] == "video":
+                m = await context.bot.send_video(user_id, item["data"], protect_content=protect)
+            else:
+                continue
+            msg_ids.append(m.message_id)
+        except Exception:
             continue
 
-        msg_ids.append(m.message_id)
-
-    total_pages = ((len(videos) - 1) // PER_PAGE) + 1
+    total_pages = ((len(videos) - 1) // PER_PAGE) + 1 if videos else 1
 
     buttons = []
-
     if page != 0:
         buttons.append(InlineKeyboardButton("⏮ اولین صفحه", callback_data=f"PAGE_{category_key}_0"))
     if page > 0:
@@ -246,7 +301,6 @@ async def send_page(user_id, category_key, page, context):
 # =======================
 # START
 # =======================
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_banned(update.effective_user.id):
         return await update.message.reply_text("🚫 شما بن شده‌اید و امکان استفاده از ربات را ندارید.")
@@ -261,17 +315,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📌 برای خرید اشتراک هم می‌تونی از بخش مربوطه استفاده کنی.
 """
-
     await update.message.reply_text(welcome_text, reply_markup=kb)
 
 
 # =======================
-# دستور /backup – نسخه نهایی و بدون هیچ اروری (Railway + GitHub)
+# دستور /backup (ارسال ZIP دستی)
 # =======================
 import zipfile
-from io import BytesIO
-import os               # ← این خط رو اضافه کن
-import datetime
+from io import BytesIO as _BytesIO
 
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
@@ -280,8 +331,7 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_chat_action("upload_document")
 
-    # ساخت zip در حافظه
-    buffer = BytesIO()
+    buffer = _BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         files = [
             ("data.json", DATA_FILE),
@@ -293,11 +343,9 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 with open(real_path, "rb") as f:
                     zip_file.writestr(display_name, f.read())
             except Exception:
-                zip_file.writestr(display_name, "{}")  # فایل خالی می‌سازه اگه مشکلی بود
+                zip_file.writestr(display_name, "{}")
 
     buffer.seek(0)
-
-    # اسم فایل با تاریخ و ساعت
     now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
     filename = f"Backup_{now}.zip"
 
@@ -308,11 +356,9 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-
 # =======================
 # /addsub
 # =======================
-
 async def add_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -322,26 +368,30 @@ async def add_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     uid = context.args[0]
-    days = int(context.args[1])
+    try:
+        days = int(context.args[1])
+    except Exception:
+        return await update.message.reply_text("مقدار روز باید عدد باشد.")
 
     data = load_data()
     expiry = datetime.datetime.now() + datetime.timedelta(days=days)
     data["users"][uid] = {"expiry": expiry.isoformat()}
 
     save_data(data)
+    # بکاپ بفرست
+    await save_database_and_send_backup(context, data, load_pending())
 
     await update.message.reply_text(f"اشتراک {uid} برای {days} روز فعال شد")
 
     try:
         await context.bot.send_message(uid, "✅ اشتراک شما فعال شد")
-    except:
+    except Exception:
         pass
 
 
 # =======================
-# /addsub
+# remove subscription
 # =======================
-
 async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return await update.message.reply_text("❌ شما ادمین نیستید.")
@@ -357,17 +407,18 @@ async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     del data["users"][uid]
     save_data(data)
+    await save_database_and_send_backup(context, data, load_pending())
 
     await update.message.reply_text(f"❌ اشتراک کاربر {uid} حذف شد.")
 
     try:
         await context.bot.send_message(uid, "❕ اشتراک شما توسط ادمین حذف شد.")
-    except:
+    except Exception:
         pass
 
 
 # =======================
-# دستور /subs - لیست کامل کاربران با اشتراک فعال
+# /subs (لیست اشتراک‌ها)
 # =======================
 async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
@@ -382,19 +433,17 @@ async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             expiry = datetime.datetime.fromisoformat(info["expiry"])
             if expiry > datetime.datetime.now():
                 user_id = int(uid_str)
-                # سعی می‌کنیم یوزرنیم و اسم رو از تلگرام بگیریم
                 try:
                     user = await context.bot.get_chat(user_id)
                     username = f"@{user.username}" if user.username else "ندارد"
-                except:
+                except Exception:
                     username = "ندارد (مسدود یا حذف شده)"
 
-                persian_date = expiry.strftime('%Y/%m/%d').replace('2025', '1404').replace('2026', '1405')  # تبدیل به شمسی تقریبی
+                persian_date = expiry.strftime('%Y/%m/%d')
                 active_users.append((user_id, username, persian_date))
-        except:
+        except Exception:
             continue
 
-    # مرتب‌سازی بر اساس تاریخ انقضا (جدیدتر بالا)
     active_users.sort(key=lambda x: x[2], reverse=True)
 
     if not active_users:
@@ -407,7 +456,6 @@ async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "\n".join(lines)
 
-    # اگر متن خیلی بلند شد، به صورت فایل txt می‌فرستیم
     if len(text) > 4000:
         file_content = "\n".join([f"{uid} | {username} | تا {exp}" for uid, username, exp in active_users])
         file_content = "USERID | USERNAME | انقضا\n" + file_content
@@ -420,73 +468,52 @@ async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =======================
-# /ban
+# /ban و /unban
 # =======================
-
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return await update.message.reply_text("❌ شما ادمین نیستید.")
 
     if len(context.args) < 2:
         return await update.message.reply_text(
-            "فرمت درست:\n"
-            "/ban perm USERID\n"
-            "/ban HOURS USERID\n"
-            "مثال:\n"
-            "/ban perm 123456789\n"
-            "/ban 48 123456789"
+            "فرمت درست:\n/ban perm USERID\n/ban HOURS USERID\n"
         )
 
-    mode = context.args[0]            # perm یا عدد
-    uid = str(context.args[1])        # USERID
+    mode = context.args[0]
+    uid = str(context.args[1])
 
     data = load_data()
-
-    # اگر بخش bans وجود نداشت ایجادش کنیم
     if "bans" not in data:
         data["bans"] = {}
 
-    # --- بن دائمی ---
     if mode.lower() == "perm":
         data["bans"][uid] = "PERMANENT"
         save_data(data)
-
+        await save_database_and_send_backup(context, data, load_pending())
         await update.message.reply_text(f"🚫 کاربر {uid} برای همیشه بن شد.")
         try:
             await context.bot.send_message(uid, "🚫 شما به طور دائمی بن شدید.")
-        except:
+        except Exception:
             pass
-
         return
 
-    # --- اگر بن زمان‌دار بود ---
     if mode.isdigit():
         hours = int(mode)
-
-        # جلوگیری از خطای OverflowError
-        if hours > 8760:  # ۱ سال
+        if hours > 8760:
             return await update.message.reply_text("❗ حداکثر مقدار مجاز 8760 ساعت است (۱ سال).")
-
-        # محاسبه پایان بن
         ban_until = datetime.datetime.now() + datetime.timedelta(hours=hours)
         data["bans"][uid] = ban_until.isoformat()
         save_data(data)
-
+        await save_database_and_send_backup(context, data, load_pending())
         await update.message.reply_text(f"⛔ کاربر {uid} برای {hours} ساعت بن شد.")
-
         try:
             await context.bot.send_message(uid, f"⛔ شما برای {hours} ساعت بن شدید.")
-        except:
+        except Exception:
             pass
-
         return
 
     return await update.message.reply_text("❗ حالت نامعتبر است. فقط perm یا عدد ساعت وارد کنید.")
 
-
-# =======================
-# /unban
-# =======================
 
 async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
@@ -503,19 +530,18 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     del data["bans"][uid]
     save_data(data)
+    await save_database_and_send_backup(context, data, load_pending())
 
     await update.message.reply_text(f"✅ کاربر {uid} از بن خارج شد.")
-
     try:
         await context.bot.send_message(uid, "✅ شما از لیست بن خارج شدید و دوباره می‌توانید استفاده کنید.")
-    except:
+    except Exception:
         pass
 
 
 # =======================
-# منو
+# منو و مدیریت دسته‌ها / نمایش محتوا
 # =======================
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -525,33 +551,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     data = load_data()
 
-    # بررسی بن بودن کاربر
-    bans = data.get("bans", {})
-    uid = str(user_id)
-
-    if uid in bans:
-        if bans[uid] == "PERMANENT":
-            return await update.message.reply_text("🚫 شما بن هستید و نمی‌توانید از بات استفاده کنید.")
-
-        else:
-            try:
-                ban_until = datetime.datetime.fromisoformat(bans[uid])
-            except:
-                ban_until = None
-
-            if ban_until and ban_until > datetime.datetime.now():
-                remaining = ban_until - datetime.datetime.now()
-                hours_left = int(remaining.total_seconds() // 3600)
-                return await update.message.reply_text(
-                    f"⛔ شما هنوز {hours_left} ساعت بن هستید."
-                )
-            else:
-                # بن تمام شده → حذف بن
-                del bans[uid]
-                save_data(data)
-
-
-    # خرید اشتراک
+    # خرید اشتراک (نمایش)
     if text == "📌 خرید اشتراک":
         msg = """
 📌 **راهنما و پشتیبانی**
@@ -568,6 +568,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🔒 قفل فوروارد" and user_id in ADMINS:
         data["protect"] = not data.get("protect", True)
         save_data(data)
+        await save_database_and_send_backup(context, data, load_pending())
         status = "فعال" if data["protect"] else "غیرفعال"
         await update.message.reply_text(f"قفل فوروارد: {status}")
         return
@@ -579,7 +580,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لغو شد", reply_markup=kb)
         return
 
-    # ساخت دسته جدید
+    # ساخت دسته جدید (مرحله‌ای)
     if text == "➕ ساخت دسته جدید" and user_id in ADMINS:
         context.user_data["create_state"] = "wait_name"
         await update.message.reply_text(
@@ -603,6 +604,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("شناسه فقط شامل حروف و عدد باشد.")
             return
 
+        data = load_data()
         if key in data["categories"]:
             await update.message.reply_text("این شناسه وجود دارد.")
             return
@@ -610,6 +612,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = context.user_data["tmp_name"]
         data["categories"][key] = {"name": name, "videos": []}
         save_data(data)
+        await save_database_and_send_backup(context, data, load_pending())
 
         context.user_data.clear()
         kb = build_main_keyboard(True)
@@ -630,6 +633,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if info["name"] == text:
                 data["categories"].pop(key)
                 save_data(data)
+                await save_database_and_send_backup(context, data, load_pending())
                 kb = build_main_keyboard(True)
                 await update.message.reply_text("حذف شد.", reply_markup=kb)
                 return
@@ -657,31 +661,23 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🆔 شناسه:` {uid}`
 📅 اشتراک: ❌ فعال نیست
 """
-
         await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
-
-    # دسته ویژه: لذت ۱ دقیقه‌ای 1️⃣
+    # دسته ویژه: لذت ۱ دقیقه‌ای
     if text == "لذت ۱ دقیقه‌ای 1️⃣":
-
         if not has_subscription(user_id):
             return await update.message.reply_text("❌ اشتراک ندارید")
 
         special_key = "one_minute"
-
         if special_key not in data["categories"]:
             return await update.message.reply_text("❗ این دسته هنوز تنظیم نشده است.")
 
         videos = data["categories"][special_key]["videos"]
-
         if len(videos) == 0:
             return await update.message.reply_text("محتوایی برای این دسته موجود نیست.")
 
-        # انتخاب رندوم
-        import random
         vid = random.choice(videos)
-
         protect = data.get("protect", True)
 
         if vid["type"] == "text":
@@ -690,29 +686,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_photo(vid["data"], protect_content=protect)
         elif vid["type"] == "video":
             await update.message.reply_video(vid["data"], protect_content=protect)
-
         return
 
-
-    # نمایش محتوا
+    # نمایش محتوا برای دیگر دسته‌ها
     for key, info in data["categories"].items():
         if info["name"] == text:
             if not has_subscription(user_id):
                 await update.message.reply_text("❌ اشتراک ندارید")
                 return
-
             if len(info["videos"]) == 0:
                 await update.message.reply_text("محتوایی موجود نیست.")
                 return
-
             await send_page(user_id, key, 0, context)
             return
 
 
 # =======================
-# افزودن محتوا توسط ادمین
+# افزودن محتوا توسط ادمین (ساخت pending)
 # =======================
-
 async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -728,25 +719,28 @@ async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # عکس
     elif update.message.photo:
-        content = {"type": "video", "data": update.message.photo[-1].file_id, "time": now_time}  # نوع photo ولی file_id همان video نیست! درستش اینه:
+        # فقط photo
         content = {"type": "photo", "data": update.message.photo[-1].file_id, "time": now_time}
 
     # ویدیو معمولی
     elif update.message.video:
         content = {"type": "video", "data": update.message.video.file_id, "time": now_time}
 
-    # ویدیو نوت (دایره‌ای) - این خط جدید و مهمه!
+    # ویدیو نوت
     elif update.message.video_note:
         content = {"type": "video", "data": update.message.video_note.file_id, "time": now_time}
 
     else:
-        return  # اگر هیچ کدوم نبود، کاری نکن
+        return
 
     # ساخت کلید موقت برای pending
     pkey = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
     pending = load_pending()
     pending[pkey] = content
     save_pending(pending)
+
+    # فراخوانی بکاپ (چون pending تغییر کرده)
+    await save_database_and_send_backup(context, load_data(), pending)
 
     # ساخت کیبورد انتخاب دسته
     data = load_data()
@@ -765,105 +759,71 @@ async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =======================
 # دکمه‌های اینلاین
 # =======================
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = load_data()
 
-    # ========================
-    # افزودن محتوا
-    # ========================
+    # افزودن محتوا از pending به data
     if query.data.startswith("ADD::"):
         if query.from_user.id not in ADMINS:
             await query.answer("اجازه ندارید", show_alert=True)
             return
 
-        # ساختار: ADD::cat_key::pkey
         _, cat_key, pkey = query.data.split("::")
-
         pending = load_pending()
 
         if pkey not in pending:
             await query.message.reply_text("❌ یافت نشد")
             return
 
+        # اضافه کردن به data
         data["categories"][cat_key]["videos"].append(pending[pkey])
         save_data(data)
 
+        # حذف از pending
         pending.pop(pkey)
         save_pending(pending)
 
+        # بکاپ نهایی (بعد از هر دو ذخیره)
+        await save_database_and_send_backup(context, data, pending)
+
         try:
             await query.message.delete()
-        except:
+        except Exception:
             pass
 
         await context.bot.send_message(query.from_user.id, "✅ محتوای جدید اضافه شد.")
         await query.answer()
         return
 
-    # ========================
-    # لغو
-    # ========================
-    if query.data == "CANCEL":
-        try:
-            await query.message.delete()
-        except:
-            pass
-
-        await context.bot.send_message(query.from_user.id, "لغو شد.")
-        await query.answer()
-        return
-
-    # ========================
-    # صفحه‌بندی
-    # ========================
-    if query.data.startswith("PAGE_"):
-        _, cat_key, page = query.data.split("_")
-        page = int(page)
-
-        await send_page(query.from_user.id, cat_key, page, context)
-        await query.answer()
-        return
-
     # لغو
     if query.data == "CANCEL":
         try:
             await query.message.delete()
-        except:
+        except Exception:
             pass
-
         await context.bot.send_message(query.from_user.id, "لغو شد.")
         await query.answer()
-
         return
 
     # صفحه‌بندی
     if query.data.startswith("PAGE_"):
         _, cat_key, page = query.data.split("_")
         page = int(page)
-
         await send_page(query.from_user.id, cat_key, page, context)
         await query.answer()
         return
-
-    # لغو
-    if query.data == "CANCEL":
-        try:
-            await query.message.delete()
-        except:
-            pass
-
-        await context.bot.send_message(query.from_user.id, "لغو شد.")
-        await query.answer()
 
 
 # =======================
 # اجرای بات
 # =======================
-
 def main():
+    # اطمینان از وجود فایل‌ها
     init_data()
+    # اگر pending وجود نداشت یک فایل خالی بساز
+    if not load_pending():
+        save_pending({})
 
     app = Application.builder().token(TOKEN).build()
 
@@ -878,7 +838,7 @@ def main():
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_media))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot Ba Movafaghiat Bala Umad. ✅")
+    print("Bot started. ✅")
     app.run_polling()
 
 
