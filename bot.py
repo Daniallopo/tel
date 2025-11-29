@@ -323,6 +323,48 @@ async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # =======================
+# دستور /backup – نسخه نهایی و بدون هیچ اروری (Railway + GitHub)
+# =======================
+import zipfile
+from io import BytesIO
+import os               # ← این خط رو اضافه کن
+import datetime
+
+async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        await update.message.reply_text("فقط ادمین می‌تونه بکاپ بگیره!")
+        return
+
+    await update.message.reply_chat_action("upload_document")
+
+    # ساخت zip در حافظه
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        files = [
+            ("data.json", DATA_FILE),
+            ("pending.json", PENDING_FILE),
+            ("users.txt", USERS_FILE)
+        ]
+        for display_name, real_path in files:
+            try:
+                with open(real_path, "rb") as f:
+                    zip_file.writestr(display_name, f.read())
+            except Exception:
+                zip_file.writestr(display_name, "{}")  # فایل خالی می‌سازه اگه مشکلی بود
+
+    buffer.seek(0)
+
+    # اسم فایل با تاریخ و ساعت
+    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    filename = f"Backup_{now}.zip"
+
+    await update.message.reply_document(
+        document=buffer,
+        filename=filename,
+        caption=f"بکاپ کامل ربات\nتاریخ: {now}\nتعداد فایل: ۳ تا"
+    )
+    
+# =======================
 # دستور /actives - لیست کامل کاربران با اشتراک فعال
 # =======================
 async def subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -778,6 +820,7 @@ def main():
     application.add_handler(CommandHandler("ban", ban_user))
     application.add_handler(CommandHandler("unban", unban_user))
     application.add_handler(CommandHandler("subs", subs))
+    application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
     application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE | filters.TEXT & ~filters.COMMAND, admin_media))
     application.add_handler(CallbackQueryHandler(button_handler))
@@ -788,6 +831,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
