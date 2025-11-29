@@ -716,21 +716,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_data()
+    application = Application.builder().token(TOKEN).concurrent_updates(True).build()
 
-    app = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("addsub", add_sub))
+    application.add_handler(CommandHandler("removesub", remove_subscription))
+    application.add_handler(CommandHandler("ban", ban_user))
+    application.add_handler(CommandHandler("unban", unban_user))
+    
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE | filters.TEXT & ~filters.COMMAND, admin_media))
+    application.add_handler(CallbackQueryHandler(button_handler))
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("addsub", add_sub))
-    app.add_handler(CommandHandler("removesub", remove_subscription))
-    app.add_handler(CommandHandler("ban", ban_user))
-    app.add_handler(CommandHandler("unban", unban_user))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_media))
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    print("Bot Ba Movafaghiat Bala Umad. ✅")
-    app.run_polling()
-
+    print("Bot Ba Movafaghiat Bala Umad.")
+    
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
+
