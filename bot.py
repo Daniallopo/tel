@@ -1,3 +1,26 @@
+# =======================
+# مسیر جدید و دائمی – هیچوقت پاک نمیشه (Volume)
+# =======================
+import os
+import shutil
+
+# اگه Volume وصل باشه از /data استفاده کن، وگرنه از پوشه فعلی
+BASE_DIR = "/data" if os.path.exists("/data") else "."
+
+DATA_FILE    = os.path.join(BASE_DIR, "data.json")
+PENDING_FILE = os.path.join(BASE_DIR, "pending.json")
+USERS_FILE   = os.path.join(BASE_DIR, "users.txt")
+
+# فقط اولین بار: فایل‌ها رو از گیتهاب کپی کن به Volume
+if os.path.exists("/data") and not os.path.exists(DATA_FILE):
+    print("در حال انتقال فایل‌ها به Volume دائمی...")
+    for file_name in ["data.json", "pending.json", "users.txt"]:
+        old_path = file_name
+        new_path = os.path.join("/data", file_name)
+        if os.path.exists(old_path):
+            shutil.copy(old_path, new_path)
+            print(f"{file_name} → به Volume منتقل شد")
+    print("تموم! از این به بعد هیچی پاک نمیشه")
 import json
 import datetime
 import random
@@ -789,6 +812,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
