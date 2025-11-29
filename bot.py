@@ -709,41 +709,48 @@ async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =======================
- test
+# بکاپ خودکار هر وقت تغییری شد (فقط برای ادمین اصلی)
 # =======================
 import hashlib
 import asyncio
 
-# شناسه ادمینی که می‌خوای بکاپ اتومات براش بیاد
-AUTO_BACKUP_ADMIN = 7756216825  # ← اینجا آیدی خودتو بذار
+# آیدی خودت رو اینجا بذار (همونی که می‌خوای بکاپ براش بیاد)
+AUTO_BACKUP_ADMIN = 7756216825  # ← عوضش کن به آیدی خودت
 
-# برای ذخیره هش قبلی فایل‌ها
+# برای ذخیره وضعیت قبلی فایل‌ها
 _last_data_hash = None
 _last_pending_hash = None
 
 async def auto_backup_if_changed(context: ContextTypes.DEFAULT_TYPE):
     global _last_data_hash, _last_pending_hash
 
+    # اگه هنوز فایل‌ها وجود ندارن، ولش کن
+    if not os.path.exists(DATA_FILE) or not os.path.exists(PENDING_FILE):
+        return
+
     try:
+        # هش فعلی data.json
         with open(DATA_FILE, "rb") as f:
-            current_data = f.read()
-        data_hash = hashlib.md5(current_data).hexdigest()
-
+            current_data_hash = hashlib.md5(f.read()).hexdigest()
+        # هش فعلی pending.json
         with open(PENDING_FILE, "rb") as f:
-            current_pending = f.read()
-        pending_hash = hashlib.md5(current_pending).hexdigest()
+            current_pending_hash = hashlib.md5(f.read()).hexdigest()
     except:
-        return  # فایل‌ها هنوز نیستن
+        return
 
-    # اگه data.json تغییر کرد یا pending.json تغییر کرد
-    if data_hash != _last_data_hash or pending_hash != _last_pending_hash:
-        _last_data_hash = data_hash
-        _last_pending_hash = pending_hash
+    # اگه تغییری کرده بود
+    if (current_data_hash != _last_data_hash) or (current_pending_hash != _last_pending_hash):
+        _last_data_hash = current_data_hash
+        _last_pending_hash = current_pending_hash
 
-        # ساخت زیپ
+        # ساخت فایل زیپ
         buffer = BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for path, name in [(DATA_FILE, "data.json"), (PENDING_FILE, "pending.json"), (USERS_FILE, "users.txt")]:
+            for path, name in [
+                (DATA_FILE, "data.json"),
+                (PENDING_FILE, "pending.json"),
+                (USERS_FILE, "users.txt")
+            ]:
                 try:
                     with open(path, "rb") as f:
                         zf.writestr(name, f.read())
@@ -751,16 +758,16 @@ async def auto_backup_if_changed(context: ContextTypes.DEFAULT_TYPE):
                     zf.writestr(name, "{}")
 
         buffer.seek(0)
-        now = datetime.datetime.now().strftime("%H:%M - %Y/%m/%d")
+        now = datetime.datetime.now().strftime("%H:%M - %d/%m/%Y")
 
         await context.bot.send_document(
             chat_id=AUTO_BACKUP_ADMIN,
             document=buffer,
             filename=f"تغییرات_ربات_{now}.zip",
-            caption=f"تغییر جدید تشخیص داده شد!\n"
-                    f"زمان: {now}\n"
-                    f"دیتابیس به‌روز شد"
+            caption=f"تغییر جدید در دیتابیس!\nزمان: {now}\nربات به‌روز شد"
         )
+
+
 # =======================
 # دکمه‌های اینلاین
 # =======================
@@ -849,6 +856,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
