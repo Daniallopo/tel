@@ -709,6 +709,59 @@ async def admin_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =======================
+ test
+# =======================
+import hashlib
+import asyncio
+
+# شناسه ادمینی که می‌خوای بکاپ اتومات براش بیاد
+AUTO_BACKUP_ADMIN = 7756216825  # ← اینجا آیدی خودتو بذار
+
+# برای ذخیره هش قبلی فایل‌ها
+_last_data_hash = None
+_last_pending_hash = None
+
+async def auto_backup_if_changed(context: ContextTypes.DEFAULT_TYPE):
+    global _last_data_hash, _last_pending_hash
+
+    try:
+        with open(DATA_FILE, "rb") as f:
+            current_data = f.read()
+        data_hash = hashlib.md5(current_data).hexdigest()
+
+        with open(PENDING_FILE, "rb") as f:
+            current_pending = f.read()
+        pending_hash = hashlib.md5(current_pending).hexdigest()
+    except:
+        return  # فایل‌ها هنوز نیستن
+
+    # اگه data.json تغییر کرد یا pending.json تغییر کرد
+    if data_hash != _last_data_hash or pending_hash != _last_pending_hash:
+        _last_data_hash = data_hash
+        _last_pending_hash = pending_hash
+
+        # ساخت زیپ
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path, name in [(DATA_FILE, "data.json"), (PENDING_FILE, "pending.json"), (USERS_FILE, "users.txt")]:
+                try:
+                    with open(path, "rb") as f:
+                        zf.writestr(name, f.read())
+                except:
+                    zf.writestr(name, "{}")
+
+        buffer.seek(0)
+        now = datetime.datetime.now().strftime("%H:%M - %Y/%m/%d")
+
+        await context.bot.send_document(
+            chat_id=AUTO_BACKUP_ADMIN,
+            document=buffer,
+            filename=f"تغییرات_ربات_{now}.zip",
+            caption=f"تغییر جدید تشخیص داده شد!\n"
+                    f"زمان: {now}\n"
+                    f"دیتابیس به‌روز شد"
+        )
+# =======================
 # دکمه‌های اینلاین
 # =======================
 
@@ -789,6 +842,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
