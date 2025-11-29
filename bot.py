@@ -1,3 +1,6 @@
+import os
+if os.path.exists("init_volume.py"):
+    import init_volume.py
 import json
 import datetime
 import random
@@ -831,6 +834,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
