@@ -323,46 +323,28 @@ async def remove_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # =======================
-# دستور /backup – نسخه نهایی و بدون هیچ اروری (Railway + GitHub)
+# مسیر جدید و دائمی – هیچوقت پاک نمیشه (Volume)
 # =======================
-import zipfile
-from io import BytesIO
-import os               # ← این خط رو اضافه کن
-import datetime
+import os
+import shutil
 
-async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMINS:
-        await update.message.reply_text("فقط ادمین می‌تونه بکاپ بگیره!")
-        return
+# اگه Volume وصل باشه از /data استفاده کن، وگرنه از پوشه فعلی
+BASE_DIR = "/data" if os.path.exists("/data") else "."
 
-    await update.message.reply_chat_action("upload_document")
+DATA_FILE    = os.path.join(BASE_DIR, "data.json")
+PENDING_FILE = os.path.join(BASE_DIR, "pending.json")
+USERS_FILE   = os.path.join(BASE_DIR, "users.txt")
 
-    # ساخت zip در حافظه
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        files = [
-            ("data.json", DATA_FILE),
-            ("pending.json", PENDING_FILE),
-            ("users.txt", USERS_FILE)
-        ]
-        for display_name, real_path in files:
-            try:
-                with open(real_path, "rb") as f:
-                    zip_file.writestr(display_name, f.read())
-            except Exception:
-                zip_file.writestr(display_name, "{}")  # فایل خالی می‌سازه اگه مشکلی بود
-
-    buffer.seek(0)
-
-    # اسم فایل با تاریخ و ساعت
-    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    filename = f"Backup_{now}.zip"
-
-    await update.message.reply_document(
-        document=buffer,
-        filename=filename,
-        caption=f"بکاپ کامل ربات\nتاریخ: {now}\nتعداد فایل: ۳ تا"
-    )
+# فقط اولین بار: فایل‌ها رو از گیتهاب کپی کن به Volume
+if os.path.exists("/data") and not os.path.exists(DATA_FILE):
+    print("در حال انتقال فایل‌ها به Volume دائمی...")
+    for file_name in ["data.json", "pending.json", "users.txt"]:
+        old_path = file_name
+        new_path = os.path.join("/data", file_name)
+        if os.path.exists(old_path):
+            shutil.copy(old_path, new_path)
+            print(f"{file_name} → به Volume منتقل شد")
+    print("تموم! از این به بعد هیچی پاک نمیشه")
     
 # =======================
 # دستور /actives - لیست کامل کاربران با اشتراک فعال
@@ -831,6 +813,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
