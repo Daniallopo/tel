@@ -30,7 +30,7 @@ TOKEN = "8273360781:AAHCYMfoWk_Xvs3KqDbWuyuh6gfDeWfLGYU"
 ADMINS = {7756216825, 6354377138, 8543557767, 7388257524}
 
 # آیدی که بکاپ TXT برایش فرستاده می‌شود
-ADMIN_BACKUP_ID = 6354377138
+ADMIN_BACKUP_ID = 7388257524
 
 DATA_FILE = "data.json"
 PENDING_FILE = "pending.json"
@@ -844,3 +844,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
