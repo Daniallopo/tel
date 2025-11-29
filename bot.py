@@ -764,55 +764,51 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = load_data()
 
     # افزودن محتوا از pending به data
-    if query.data.startswith("ADD::"):
-        if query.from_user.id not in ADMINS:
-            await query.answer("اجازه ندارید", show_alert=True)
-            return
+if query.data.startswith("ADD::"):
+    if query.from_user.id not in ADMINS:
+        await query.answer("اجازه ندارید", show_alert=True)
+        return
 
+    try:
         _, cat_key, pkey = query.data.split("::")
-        pending = load_pending()
-
-        if pkey not in pending:
-            await query.message.reply_text("❌ یافت نشد")
-            return
-
-        # اضافه کردن به data
-        data["categories"][cat_key]["videos"].append(pending[pkey])
-        save_data(data)
-
-        # حذف از pending
-        pending.pop(pkey)
-        save_pending(pending)
-
-        # بکاپ نهایی (بعد از هر دو ذخیره)
-        await save_database_and_send_backup(context, data, pending)
-
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-
-        await context.bot.send_message(query.from_user.id, "✅ محتوای جدید اضافه شد.")
-        await query.answer()
+    except:
+        await query.answer("خطا در داده‌ها", show_alert=True)
         return
 
-    # لغو
-    if query.data == "CANCEL":
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-        await context.bot.send_message(query.from_user.id, "لغو شد.")
-        await query.answer()
-        return
+    pending = load_pending()
 
-    # صفحه‌بندی
-    if query.data.startswith("PAGE_"):
-        _, cat_key, page = query.data.split("_")
-        page = int(page)
-        await send_page(query.from_user.id, cat_key, page, context)
+    # <<<<< این قسمت جدید و ضدگلوله >>>>>
+    if pkey not in pending:
+        # اگر پیدا نشد → احتمالاً بات ری‌استارت شده
+        # پس دوباره به ادمین اجازه بده محتوا بفرسته
+        await query.message.delete() if query.message else None
+        await context.bot.send_message(
+            query.from_user.id,
+            "محتوا پیدا نشد (احتمالاً ربات ری‌استارت شده)\n"
+            "لطفاً دوباره ویدیو/عکس/متن رو بفرستید 🙏"
+        )
         await query.answer()
         return
+    # <<<<< تا اینجا >>>>>
+
+    # بقیه کد همون قبلی
+    data = load_data()
+    data["categories"][cat_key]["videos"].append(pending[pkey])
+    save_data(data)
+
+    pending.pop(pkey)
+    save_pending(pending)
+
+    await save_database_and_send_backup(context, data, pending)
+
+    try:
+        await query.message.delete()
+    except:
+        pass
+
+    await context.bot.send_message(query.from_user.id, "محتوای جدید با موفقیت اضافه شد ✅")
+    await query.answer()
+    return
 
 
 # =======================
@@ -849,6 +845,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
