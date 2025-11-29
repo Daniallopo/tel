@@ -835,7 +835,12 @@ def main():
     app.add_handler(CommandHandler("subs", subs))
     app.add_handler(CommandHandler("backup", backup_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_media))
+    app.add_handler(
+    MessageHandler(
+        filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE | filters.Document.VIDEO,
+        admin_media
+    )
+)
     app.add_handler(CallbackQueryHandler(button_handler))
 
     print("Bot started. ✅")
@@ -844,6 +849,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
