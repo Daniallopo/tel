@@ -825,6 +825,13 @@ def main():
     init_data()
     application = Application.builder().token(TOKEN).concurrent_updates(True).build()
 
+        # چک کردن تغییرات هر 30 ثانیه
+    application.job_queue.run_repeating(
+        auto_backup_if_changed,
+        interval=30,  # هر 30 ثانیه چک می‌کنه
+        first=10
+    )
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("addsub", add_sub))
     application.add_handler(CommandHandler("removesub", remove_subscription))
@@ -842,6 +849,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
