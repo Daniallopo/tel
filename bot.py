@@ -255,7 +255,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = build_main_keyboard(update.effective_user.id in ADMINS)
 
     welcome_text = """
-🔥 سلام! خوش اومدی به دنیای فیلم های اکشن 🔞
+🔥 سلام! خوش اومدی به دنیای فیلم های پورن 🔞
 اینجا می‌تونی جدیدترین و باکیفیت‌ترین ویدیوها رو ببینی.
 از منوی پایین دسته مورد نظر رو انتخاب کن 👇
 
@@ -734,4 +734,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
