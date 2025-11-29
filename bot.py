@@ -24,7 +24,7 @@ from telegram.ext import (
 # تنظیمات
 # =======================
 # حتماً توکن رو اینجا با توکن جدید یا از متغیر محیطی بذار
-TOKEN = "8273360781:AAEONUlCKNfM6DsqNukdN-wEN9J4eo26RUY"
+TOKEN = "8273360781:AAEONUlCKNfM6DsqNukdN-wEN9J4eo26RU"
 
 # چند ادمین
 ADMINS = {7756216825, 6354377138, 8543557767, 7388257524}
@@ -870,6 +870,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
