@@ -830,16 +830,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_data()
+    
+    # ساخت اپلیکیشن با JobQueue فعال
     application = Application.builder().token(TOKEN).concurrent_updates(True).build()
-application.job_queue  # این خط مهمه!
+    
+    # فعال کردن JobQueue (این خط حتماً باشه!)
+    _ = application.job_queue  # این خط مهمه! بدون این job_queue کار نمی‌کنه
 
-        # چک کردن تغییرات هر 30 ثانیه
+    # بکاپ خودکار هر وقت تغییری شد
     application.job_queue.run_repeating(
         auto_backup_if_changed,
-        interval=30,  # هر 30 ثانیه چک می‌کنه
-        first=10
+        interval=30,    # هر ۳۰ ثانیه چک می‌کنه
+        first=10        # اولین چک بعد از ۱۰ ثانیه
     )
-    
+
+    # هندلرها
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("addsub", add_sub))
     application.add_handler(CommandHandler("removesub", remove_subscription))
@@ -848,15 +853,15 @@ application.job_queue  # این خط مهمه!
     application.add_handler(CommandHandler("subs", subs))
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
-    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.VIDEO_NOTE | filters.TEXT & ~filters.COMMAND, admin_media))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.TEXT & ~filters.COMMAND, admin_media))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    print("Bot Ba Movafaghiat Bala Umad.")
-    
+    print("ربات با موفقیت بالا اومد - بکاپ خودکار فعاله!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
+
 
 
 
