@@ -12,7 +12,7 @@ BOT_TOKEN = "8359064642:AAFzFYj8ZFSZ1Vl9hdcWIiMkcb4vAuAHZII"
 # تنظیم delay
 DELAY_PHOTO = 2  # ثانیه برای عکس
 DELAY_VIDEO = 5  # ثانیه برای ویدیو
-DELAY_GIF = 3    # ثانیه برای گیف
+DELAY_GIF = 10    # ثانیه برای گیف
 
 # زمان آخرین فوروارد
 last_forward_time = 0
@@ -155,3 +155,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
