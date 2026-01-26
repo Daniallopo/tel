@@ -32,7 +32,7 @@ forward_stats = {
     'total': 0
 }
 
-# 🔴 اضافه کردن: ردیابی پیام‌های فوروارد شده
+# ردیابی پیام‌های فوروارد شده
 forwarded_messages = set()
 
 logging.basicConfig(
@@ -55,7 +55,7 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message
         message_id = message.message_id
         
-        # 🔴 جلوگیری از فوروارد مجدد
+        # جلوگیری از فوروارد مجدد
         if message_id in forwarded_messages:
             logging.info(f"⏭️ پیام {message_id} قبلاً فوروارد شده، رد شد")
             return
@@ -89,14 +89,14 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.info(f"⏳ {wait_time:.1f} ثانیه تاخیر برای {media_type}...")
             await asyncio.sleep(wait_time)
         
-        # 🔴 مهم: استفاده از forward_message به جای send_photo/send_video
+        # استفاده از forward_message به جای send_photo/send_video
         await context.bot.forward_message(
             chat_id=DESTINATION_GROUP_ID,
             from_chat_id=SOURCE_GROUP_ID,
             message_id=message_id
         )
         
-        # 🔴 علامت‌گذاری پیام به عنوان فوروارد شده
+        # علامت‌گذاری پیام به عنوان فوروارد شده
         forwarded_messages.add(message_id)
         
         # آپدیت زمان آخرین فوروارد
@@ -118,9 +118,8 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logging.info(f"✅ {media_type} از {sender_info} فوروارد شد | 📊 کل: {forward_stats['total']}")
         
-        # 🔴 پاک‌سازی پیام‌های قدیمی از حافظه (برای جلوگیری از مصرف زیاد RAM)
+        # پاک‌سازی پیام‌های قدیمی از حافظه
         if len(forwarded_messages) > 1000:
-            # پاک‌سازی 200 تا از قدیمی‌ترین‌ها
             oldest_messages = sorted(forwarded_messages)[:200]
             for old_msg in oldest_messages:
                 forwarded_messages.remove(old_msg)
@@ -133,7 +132,6 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # تشخیص Rate Limit
         if "Too Many Requests" in error_msg or "429" in error_msg:
             logging.warning("⚠️ محدودیت سرعت! 20 ثانیه صبر...")
-            # پنالتی برای همه نوع محتواها
             penalty_time = time.time() + 20
             for key in last_times:
                 last_times[key] = penalty_time
@@ -149,7 +147,6 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif "Message to forward not found" in error_msg:
             logging.warning(f"⚠️ پیام {message_id} پیدا نشد (احتمالاً حذف شده)")
-            # حتی اگر پیدا نشد، علامت‌گذاری کن تا دوباره تلاش نکند
             forwarded_messages.add(message_id)
             
         elif "bot was blocked" in error_msg.lower():
@@ -158,7 +155,6 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دستور شروع"""
-    # 🔴 اضافه کردن اطلاعات جدید
     welcome_text = f"""
 🤖 **ربات فوروارد مدیا فعال شد**
 
@@ -179,7 +175,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔒 **حافظه:**
 • پیام‌های رد شده: {len(forwarded_messages)}
 
-💡 **نکته جدید:** 
+💡 **نکته:** 
 این بات از forward_message استفاده می‌کند، بنابراین:
 1. پیام‌ها دوباره آپلود نمی‌شوند
 2. همه اطلاعات اصلی حفظ می‌شود
@@ -230,12 +226,90 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(stats_text, parse_mode='Markdown')
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """راهنمای دستورات"""
+    help_text = f"""
+📚 **راهنمای دستورات ربات**
+
+🎯 **دستورات اصلی:**
+/start - راه‌اندازی و نمایش اطلاعات ربات
+/stats - نمایش آمار کامل و وضعیت
+/help - این راهنما
+/settings - نمایش تنظیمات فعلی
+/ping - بررسی وضعیت آنلاین بودن
+/clear - پاک‌سازی حافظه کش
+
+⚙️ **تنظیمات فعلی:**
+• Delay عکس: هر {DELAYS['photo']} ثانیه
+• Delay ویدیو: هر {DELAYS['video']} ثانیه
+• Delay گیف: هر {DELAYS['animation']} ثانیه
+
+⚠️ **نکات مهم:**
+1. delayها برای هر نوع محتوا جداگانه حساب می‌شوند
+2. اگر Rate Limit بخوریم، 20 ثانیه صبر می‌کنیم
+3. ربات فقط از گروه مبدا ({SOURCE_GROUP_ID}) دریافت می‌کند
+4. تمام لاگ‌ها در فایل forward_bot.log ذخیره می‌شوند
+
+🔧 **پشتیبانی:** برای گزارش مشکل یا پیشنهاد، با سازنده ربات تماس بگیرید.
+"""
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """نمایش تنظیمات"""
+    settings_text = f"""
+⚙️ **تنظیمات ربات**
+
+📌 **شناسه‌ها:**
+• گروه مبدا: `{SOURCE_GROUP_ID}`
+• گروه مقصد: `{DESTINATION_GROUP_ID}`
+
+⏱️ **محدودیت‌های زمانی:**
+• عکس: هر {DELAYS['photo']} ثانیه یکبار
+• ویدیو: هر {DELAYS['video']} ثانیه یکبار  
+• گیف: هر {DELAYS['animation']} ثانیه یکبار
+
+🛡️ **مدیریت خطا:**
+• Rate Limit: 20 ثانیه پنالتی
+• Timeout: 10 ثانیه انتظار
+• Connection Error: 5 ثانیه انتظار
+
+🔒 **حافظه کش:**
+• پیام‌های ذخیره شده: {len(forwarded_messages)}
+• حد حافظه: 1000 پیام
+• پاک‌سازی خودکار: بله
+
+📝 **لاگ‌گیری:**
+• فایل لاگ: forward_bot.log
+• سطح لاگ: INFO
+• فرمت زمان: YYYY-MM-DD HH:MM:SS
+
+💡 **برای تغییر تنظیمات، کد ربات را ویرایش کنید.**
+"""
+    await update.message.reply_text(settings_text, parse_mode='Markdown')
+
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بررسی وضعیت آنلاین بودن"""
+    start_time = time.time()
+    message = await update.message.reply_text("🔄 در حال بررسی...")
+    end_time = time.time()
+    response_time = round((end_time - start_time) * 1000, 2)
+    
+    ping_text = f"""
+🏓 **Pong!**
+
+✅ ربات آنلاین و فعال است
+⚡ زمان پاسخ: {response_time} میلی‌ثانیه
+📅 زمان سرور: {datetime.now().strftime("%H:%M:%S")}
+📊 فوروارد امروز: {forward_stats['total']}
+🔒 پیام‌های کش: {len(forwarded_messages)}
+"""
+    await message.edit_text(ping_text)
+
 async def clear_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پاک‌سازی حافظه کش"""
     old_count = len(forwarded_messages)
     forwarded_messages.clear()
     
-    # لاگ اطلاعات
     logging.info(f"🧹 حافظه پاک‌سازی شد: {old_count} پیام حذف شد")
     
     await update.message.reply_text(
@@ -243,6 +317,10 @@ async def clear_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🗑️ {old_count} پیام از کش حذف شد\n"
         f"📊 فورواردهای کل: {forward_stats['total']}"
     )
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت خطاهای全局"""
+    logging.error(f"خطا در پردازش: {context.error}", exc_info=context.error)
 
 def main():
     """تابع اصلی اجرای ربات"""
@@ -256,7 +334,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings))
     application.add_handler(CommandHandler("ping", ping))
-    application.add_handler(CommandHandler("clear", clear_cache))  # 🔴 کامند جدید
+    application.add_handler(CommandHandler("clear", clear_cache))
     
     # هندلر مدیا
     application.add_handler(MessageHandler(
