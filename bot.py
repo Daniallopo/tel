@@ -10,31 +10,22 @@ SOURCE_GROUP_ID = -1003675789614
 DESTINATION_GROUP_ID = -1003598921129
 BOT_TOKEN = "8359064642:AAFzFYj8ZFSZ1Vl9hdcWIiMkcb4vAuAHZII"
 
-# تنظیم delay برای هر نوع محتوا
-DELAYS = {
-    'photo': 2,      # ثانیه برای عکس
-    'video': 5,      # ثانیه برای ویدیو
-    'animation': 10  # ثانیه برای گیف
-}
+# 🔴 لیست بات‌هایی که باید فوروارد بشن (شامل hlanti)
+ALLOWED_BOTS = ['hlanti_bot', 'your_other_bot_username']  # یوزرنیم بات‌ها
 
-# زمان آخرین فوروارد برای هر نوع
-last_times = {
-    'photo': 0,
-    'video': 0,
-    'animation': 0
-}
+# تنظیم delay
+DELAYS = {'photo': 2, 'video': 5, 'animation': 10}
 
-# آمار فورواردها
-forward_stats = {
-    'photo': 0,
-    'video': 0,
-    'animation': 0,
-    'total': 0
-}
+# زمان آخرین فوروارد
+last_times = {'photo': 0, 'video': 0, 'animation': 0}
 
-# ردیابی پیام‌های فوروارد شده
+# آمار
+forward_stats = {'photo': 0, 'video': 0, 'animation': 0, 'total': 0, 'from_bots': 0, 'from_users': 0}
+
+# پیام‌های فوروارد شده
 forwarded_messages = set()
 
+# لاگ‌گیری
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -43,333 +34,202 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+logger = logging.getLogger(__name__)
+
+async def should_forward_message(message) -> bool:
+    """بررسی آیا پیام باید فوروارد شود"""
+    
+    # 🔴 مهم: اگر پیام از بات hlanti باشد، حتماً فوروارد کن
+    if message.from_user and message.from_user.is_bot:
+        logger.info(f"🤖 پیام از بات: {message.from_user.username or message.from_user.id}")
+        
+        # اگر یوزرنیم بات hlanti را می‌دانید، چک کنید
+        if message.from_user.username:
+            logger.info(f"   بات: @{message.from_user.username}")
+        
+        return True  # 🔴 همه پیام‌های بات‌ها رو فوروارد کن
+    
+    # پیام از کاربر عادی
+    return True
 
 async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """فوروارد عکس و فیلم با delay هوشمند"""
+    """فوروارد همه مدیا (هم از کاربران، هم از بات‌ها)"""
+    
+    chat_id = update.effective_chat.id
     
     # بررسی گروه مبدا
-    if update.effective_chat.id != SOURCE_GROUP_ID:
+    if chat_id != SOURCE_GROUP_ID:
         return
     
+    message = update.message
+    message_id = message.message_id
+    
+    # جلوگیری از فوروارد مجدد
+    if message_id in forwarded_messages:
+        logger.info(f"⏭️ پیام {message_id} قبلاً فوروارد شده")
+        return
+    
+    # 🔴 بررسی آیا پیام باید فوروارد شود
+    if not await should_forward_message(message):
+        logger.info(f"⏭️ پیام {message_id} فیلتر شد")
+        return
+    
+    # تشخیص نوع محتوا
+    content_type = None
+    if message.photo:
+        content_type = 'photo'
+        media_type = "عکس"
+    elif message.video:
+        content_type = 'video'
+        media_type = "ویدیو"
+    elif message.animation:
+        content_type = 'animation'
+        media_type = "گیف"
+    else:
+        return
+    
+    # محاسبه delay
+    current_time = time.time()
+    required_delay = DELAYS[content_type]
+    last_time = last_times[content_type]
+    time_passed = current_time - last_time
+    
+    if time_passed < required_delay:
+        wait_time = required_delay - time_passed
+        logger.info(f"⏳ {wait_time:.1f} ثانیه تأخیر برای {media_type}")
+        await asyncio.sleep(wait_time)
+    
     try:
-        message = update.message
-        message_id = message.message_id
+        # تشخیص فرستنده
+        sender_type = "بات" if message.from_user and message.from_user.is_bot else "کاربر"
+        sender_name = "نامشخص"
         
-        # جلوگیری از فوروارد مجدد
-        if message_id in forwarded_messages:
-            logging.info(f"⏭️ پیام {message_id} قبلاً فوروارد شده، رد شد")
-            return
+        if message.from_user:
+            if message.from_user.username:
+                sender_name = f"@{message.from_user.username}"
+            elif message.from_user.first_name:
+                sender_name = message.from_user.first_name
+            elif message.from_user.id:
+                sender_name = f"ID:{message.from_user.id}"
         
-        current_time = time.time()
+        logger.info(f"🔄 فوروارد {media_type} از {sender_type} {sender_name}...")
         
-        # تشخیص نوع محتوا
-        if message.photo:
-            media_type = "عکس"
-            content_type = 'photo'
-            
-        elif message.video:
-            media_type = "ویدیو"
-            content_type = 'video'
-            
-        elif message.animation:
-            media_type = "گیف"
-            content_type = 'animation'
-            
-        else:
-            return
-        
-        # محاسبه delay لازم
-        required_delay = DELAYS[content_type]
-        last_time = last_times[content_type]
-        time_passed = current_time - last_time
-        
-        # اگر زمان لازم نگذشته، صبر کن
-        if time_passed < required_delay:
-            wait_time = required_delay - time_passed
-            logging.info(f"⏳ {wait_time:.1f} ثانیه تاخیر برای {media_type}...")
-            await asyncio.sleep(wait_time)
-        
-        # استفاده از forward_message به جای send_photo/send_video
+        # فوروارد پیام
         await context.bot.forward_message(
             chat_id=DESTINATION_GROUP_ID,
             from_chat_id=SOURCE_GROUP_ID,
             message_id=message_id
         )
         
-        # علامت‌گذاری پیام به عنوان فوروارد شده
+        # بروزرسانی داده‌ها
         forwarded_messages.add(message_id)
-        
-        # آپدیت زمان آخرین فوروارد
         last_times[content_type] = time.time()
-        
-        # آپدیت آمار
         forward_stats[content_type] += 1
         forward_stats['total'] += 1
         
-        # لاگ اطلاعات ارسال کننده
-        sender_info = "نامشخص"
-        if message.from_user:
-            if message.from_user.username:
-                sender_info = f"@{message.from_user.username}"
-            elif message.from_user.first_name:
-                sender_info = message.from_user.first_name
-            elif message.from_user.id:
-                sender_info = f"کاربر {message.from_user.id}"
+        if message.from_user and message.from_user.is_bot:
+            forward_stats['from_bots'] += 1
+        else:
+            forward_stats['from_users'] += 1
         
-        logging.info(f"✅ {media_type} از {sender_info} فوروارد شد | 📊 کل: {forward_stats['total']}")
-        
-        # پاک‌سازی پیام‌های قدیمی از حافظه
-        if len(forwarded_messages) > 1000:
-            oldest_messages = sorted(forwarded_messages)[:200]
-            for old_msg in oldest_messages:
-                forwarded_messages.remove(old_msg)
-            logging.info(f"🧹 حافظه پاک‌سازی شد: {len(oldest_messages)} پیام قدیمی حذف شد")
+        logger.info(f"✅ فوروارد شد: {media_type} از {sender_type} {sender_name}")
+        logger.info(f"📊 آمار: کل={forward_stats['total']}, بات‌ها={forward_stats['from_bots']}, کاربران={forward_stats['from_users']}")
         
     except Exception as e:
         error_msg = str(e)
-        logging.error(f"❌ خطا در فوروارد: {error_msg}")
+        logger.error(f"❌ خطا در فوروارد: {error_msg}")
         
-        # تشخیص Rate Limit
         if "Too Many Requests" in error_msg or "429" in error_msg:
-            logging.warning("⚠️ محدودیت سرعت! 20 ثانیه صبر...")
-            penalty_time = time.time() + 20
+            logger.warning("⚠️ Rate Limit! 30 ثانیه پنالتی")
+            penalty = time.time() + 30
             for key in last_times:
-                last_times[key] = penalty_time
-            await asyncio.sleep(20)
-            
-        elif "timed out" in error_msg.lower():
-            logging.warning("⏱️ Timeout! 10 ثانیه صبر...")
-            await asyncio.sleep(10)
-            
-        elif "Connection" in error_msg:
-            logging.warning("🌐 مشکل اتصال! 5 ثانیه صبر...")
-            await asyncio.sleep(5)
+                last_times[key] = penalty
+            await asyncio.sleep(30)
             
         elif "Message to forward not found" in error_msg:
-            logging.warning(f"⚠️ پیام {message_id} پیدا نشد (احتمالاً حذف شده)")
+            logger.warning(f"⚠️ پیام {message_id} پیدا نشد")
             forwarded_messages.add(message_id)
-            
-        elif "bot was blocked" in error_msg.lower():
-            logging.error("🚫 بات بلاک شده است!")
-            raise
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دستور شروع"""
-    welcome_text = f"""
-🤖 **ربات فوروارد مدیا فعال شد**
+    stats_text = f"""
+🤖 **backupfreemedia v2.0**
 
-📍 **گروه مبدا:** `{SOURCE_GROUP_ID}`
-📍 **گروه مقصد:** `{DESTINATION_GROUP_ID}`
+📍 **گروه‌ها:**
+• مبدا: `{SOURCE_GROUP_ID}`
+• مقصد: `{DESTINATION_GROUP_ID}`
 
-⚙️ **تنظیمات Delay:**
-• 📸 عکس: {DELAYS['photo']} ثانیه
-• 🎥 ویدیو: {DELAYS['video']} ثانیه  
-• 🎬 گیف: {DELAYS['animation']} ثانیه
-
-📊 **آمار فعلی:**
+📊 **آمار کامل:**
 • کل فورواردها: {forward_stats['total']}
+• از بات‌ها: {forward_stats['from_bots']}
+• از کاربران: {forward_stats['from_users']}
+
+📁 **براساس نوع:**
 • عکس: {forward_stats['photo']}
 • ویدیو: {forward_stats['video']}
 • گیف: {forward_stats['animation']}
 
-🔒 **حافظه:**
-• پیام‌های رد شده: {len(forwarded_messages)}
-
-💡 **نکته:** 
-این بات از forward_message استفاده می‌کند، بنابراین:
-1. پیام‌ها دوباره آپلود نمی‌شوند
-2. همه اطلاعات اصلی حفظ می‌شود
-3. بات‌های دیگر هم فوروارد می‌شوند
-"""
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
-
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش آمار کامل"""
-    
-    def format_timestamp(timestamp):
-        if timestamp > 0:
-            dt = datetime.fromtimestamp(timestamp)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        return "هنوز هیچ"
-    
-    # محاسبه زمان‌های باقی‌مانده
-    current_time = time.time()
-    time_remaining = {}
-    for content_type, last_time in last_times.items():
-        remaining = DELAYS[content_type] - (current_time - last_time)
-        time_remaining[content_type] = max(0, round(remaining, 1))
-    
-    stats_text = f"""
-📊 **آمار کامل ربات**
-
-🔢 **تعداد فورواردها:**
-• 📸 عکس: {forward_stats['photo']}
-• 🎥 ویدیو: {forward_stats['video']}
-• 🎬 گیف: {forward_stats['animation']}
-• 📈 کل: {forward_stats['total']}
-
-⏰ **زمان آخرین فوروارد:**
-• عکس: {format_timestamp(last_times['photo'])}
-• ویدیو: {format_timestamp(last_times['video'])}
-• گیف: {format_timestamp(last_times['animation'])}
-
-⏳ **زمان باقی‌مانده تا فوروارد بعدی:**
-• عکس: {time_remaining['photo']} ثانیه
-• ویدیو: {time_remaining['video']} ثانیه
-• گیف: {time_remaining['animation']} ثانیه
+⚙️ **تنظیمات:**
+• تأخیر عکس: {DELAYS['photo']}s
+• تأخیر ویدیو: {DELAYS['video']}s
+• تأخیر گیف: {DELAYS['animation']}s
 
 🔒 **حافظه:**
-• پیام‌های رد شده: {len(forwarded_messages)}
+• پیام‌های کش: {len(forwarded_messages)}
 
-🔄 **وضعیت:** ✅ فعال
-📅 **آپ‌تایم:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+✅ **حالت: فوروارد همه پیام‌ها (هم کاربران، هم بات‌ها)**
 """
     await update.message.reply_text(stats_text, parse_mode='Markdown')
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """راهنمای دستورات"""
-    help_text = f"""
-📚 **راهنمای دستورات ربات**
-
-🎯 **دستورات اصلی:**
-/start - راه‌اندازی و نمایش اطلاعات ربات
-/stats - نمایش آمار کامل و وضعیت
-/help - این راهنما
-/settings - نمایش تنظیمات فعلی
-/ping - بررسی وضعیت آنلاین بودن
-/clear - پاک‌سازی حافظه کش
-
-⚙️ **تنظیمات فعلی:**
-• Delay عکس: هر {DELAYS['photo']} ثانیه
-• Delay ویدیو: هر {DELAYS['video']} ثانیه
-• Delay گیف: هر {DELAYS['animation']} ثانیه
-
-⚠️ **نکات مهم:**
-1. delayها برای هر نوع محتوا جداگانه حساب می‌شوند
-2. اگر Rate Limit بخوریم، 20 ثانیه صبر می‌کنیم
-3. ربات فقط از گروه مبدا ({SOURCE_GROUP_ID}) دریافت می‌کند
-4. تمام لاگ‌ها در فایل forward_bot.log ذخیره می‌شوند
-
-🔧 **پشتیبانی:** برای گزارش مشکل یا پیشنهاد، با سازنده ربات تماس بگیرید.
-"""
-    await update.message.reply_text(help_text, parse_mode='Markdown')
-
-async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش تنظیمات"""
-    settings_text = f"""
-⚙️ **تنظیمات ربات**
-
-📌 **شناسه‌ها:**
-• گروه مبدا: `{SOURCE_GROUP_ID}`
-• گروه مقصد: `{DESTINATION_GROUP_ID}`
-
-⏱️ **محدودیت‌های زمانی:**
-• عکس: هر {DELAYS['photo']} ثانیه یکبار
-• ویدیو: هر {DELAYS['video']} ثانیه یکبار  
-• گیف: هر {DELAYS['animation']} ثانیه یکبار
-
-🛡️ **مدیریت خطا:**
-• Rate Limit: 20 ثانیه پنالتی
-• Timeout: 10 ثانیه انتظار
-• Connection Error: 5 ثانیه انتظار
-
-🔒 **حافظه کش:**
-• پیام‌های ذخیره شده: {len(forwarded_messages)}
-• حد حافظه: 1000 پیام
-• پاک‌سازی خودکار: بله
-
-📝 **لاگ‌گیری:**
-• فایل لاگ: forward_bot.log
-• سطح لاگ: INFO
-• فرمت زمان: YYYY-MM-DD HH:MM:SS
-
-💡 **برای تغییر تنظیمات، کد ربات را ویرایش کنید.**
-"""
-    await update.message.reply_text(settings_text, parse_mode='Markdown')
-
-async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بررسی وضعیت آنلاین بودن"""
-    start_time = time.time()
-    message = await update.message.reply_text("🔄 در حال بررسی...")
-    end_time = time.time()
-    response_time = round((end_time - start_time) * 1000, 2)
-    
-    ping_text = f"""
-🏓 **Pong!**
-
-✅ ربات آنلاین و فعال است
-⚡ زمان پاسخ: {response_time} میلی‌ثانیه
-📅 زمان سرور: {datetime.now().strftime("%H:%M:%S")}
-📊 فوروارد امروز: {forward_stats['total']}
-🔒 پیام‌های کش: {len(forwarded_messages)}
-"""
-    await message.edit_text(ping_text)
-
-async def clear_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پاک‌سازی حافظه کش"""
-    old_count = len(forwarded_messages)
-    forwarded_messages.clear()
-    
-    logging.info(f"🧹 حافظه پاک‌سازی شد: {old_count} پیام حذف شد")
-    
-    await update.message.reply_text(
-        f"✅ حافظه پاک‌سازی شد\n"
-        f"🗑️ {old_count} پیام از کش حذف شد\n"
-        f"📊 فورواردهای کل: {forward_stats['total']}"
-    )
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت خطاهای全局"""
-    logging.error(f"خطا در پردازش: {context.error}", exc_info=context.error)
+async def test_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تست فوروارد دستی"""
+    try:
+        # فوروارد آخرین پیام گروه
+        messages = await context.bot.get_chat_history(SOURCE_GROUP_ID, limit=1)
+        
+        if messages:
+            last_msg = messages[0]
+            await context.bot.forward_message(
+                chat_id=DESTINATION_GROUP_ID,
+                from_chat_id=SOURCE_GROUP_ID,
+                message_id=last_msg.message_id
+            )
+            await update.message.reply_text("✅ تست فوروارد انجام شد")
+        else:
+            await update.message.reply_text("❌ پیامی در گروه نیست")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطا در تست: {str(e)}")
 
 def main():
-    """تابع اصلی اجرای ربات"""
+    """اجرای اصلی"""
+    logger.info("=" * 60)
+    logger.info("🚀 بات backupfreemedia v2.0 شروع شد")
+    logger.info(f"📍 مبدا: {SOURCE_GROUP_ID}")
+    logger.info(f"📍 مقصد: {DESTINATION_GROUP_ID}")
+    logger.info("🔓 حالت: فوروارد همه (کاربران + بات‌ها)")
+    logger.info("=" * 60)
     
-    # ساخت اپلیکیشن
-    application = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     
-    # اضافه کردن هندلرهای دستور
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("settings", settings))
-    application.add_handler(CommandHandler("ping", ping))
-    application.add_handler(CommandHandler("clear", clear_cache))
+    # کامندها
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("test", test_forward))
     
-    # هندلر مدیا
-    application.add_handler(MessageHandler(
+    # 🔴 مهم: فیلتر ALL برای دریافت همه پیام‌ها
+    app.add_handler(MessageHandler(
         filters.PHOTO | filters.VIDEO | filters.ANIMATION,
         forward_media
     ))
     
-    # هندلر خطا
-    application.add_error_handler(error_handler)
-    
-    # نمایش اطلاعات شروع
-    logging.info("=" * 60)
-    logging.info("🤖 ربات فوروارد مدیا شروع به کار کرد")
-    logging.info(f"📍 گروه مبدا: {SOURCE_GROUP_ID}")
-    logging.info(f"📍 گروه مقصد: {DESTINATION_GROUP_ID}")
-    logging.info(f"⏱️ تنظیمات Delay:")
-    logging.info(f"   • عکس: {DELAYS['photo']} ثانیه")
-    logging.info(f"   • ویدیو: {DELAYS['video']} ثانیه")
-    logging.info(f"   • گیف: {DELAYS['animation']} ثانیه")
-    logging.info(f"🔒 روش: forward_message (فوروارد مستقیم)")
-    logging.info(f"📝 لاگ در فایل: forward_bot.log")
-    logging.info("=" * 60)
-    
-    # اجرای ربات
     try:
-        application.run_polling(
+        app.run_polling(
             poll_interval=1.0,
             timeout=30,
             drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES
         )
-    except KeyboardInterrupt:
-        logging.info("⏹️ ربات توسط کاربر متوقف شد")
     except Exception as e:
-        logging.error(f"❌ خطای غیرمنتظره: {e}")
+        logger.error(f"❌ خطای اصلی: {e}")
 
 if __name__ == '__main__':
     main()
