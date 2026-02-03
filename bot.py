@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # تنظیمات
 SOURCE_GROUP_ID = -1003675789614
 DESTINATION_GROUP_ID = -1003598921129
-BOT_TOKEN = "8359064642:AAFzFYj8ZFSZ1Vl9hdcWIiMkcb4vAuAHZII"
+BOT_TOKEN = "8359064642:AAFzFYj8ZFSZ1Vl9hdcWIiMkcb4vAuAHZI"
 
 # تنظیم delay برای هر نوع محتوا
 DELAYS = {
@@ -311,3 +311,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
